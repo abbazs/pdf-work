@@ -1,0 +1,68 @@
+[project]
+name = "pdf-work"
+version = "0.1.0"
+description = "PDF CLI toolkit — read, mask, replace, and delete text in PDFs"
+requires-python = ">=3.12"
+dependencies = [
+    "cyclopts>=3.0",
+    "rich>=13.0",
+    "rich-stepper>=0.1.1",
+    "pdfplumber>=0.11",
+    "pymupdf>=1.25",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli"]
+
+[dependency-groups]
+dev = ["ruff>=0.9", "mypy>=1.14"]
+
+[project.scripts]
+pdf = "cli.pdf:cli"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # isort (import sorting)
+    "F",    # pyflakes (unused imports/variables)
+    "UP",   # pyupgrade (modern Python syntax)
+    "B",    # flake8-bugbear (common bug patterns)
+    "SIM",  # flake8-simplify (simplifiable code)
+    "RUF",  # ruff-specific rules
+    "C4",   # flake8-comprehensions (better comprehensions)
+    "PIE",  # flake8-pie (unnecessary code)
+    "RET",  # flake8-return (consistent return statements)
+    "PTH",  # flake8-use-pathlib (pathlib over os.path)
+    "ERA",  # eradicate (commented-out code)
+]
+ignore = [
+    "E501",  # line too long (formatter handles this)
+    "B008",  # function calls in default arguments (cyclopts needs this)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cli"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disable_error_code = ["import-untyped"]
+
+[[tool.mypy.overrides]]
+module = ["fitz", "stepper", "pdfplumber"]
+ignore_missing_imports = true

@@ -2,7 +2,7 @@ import functools
 import traceback
 from collections.abc import Callable
 from types import TracebackType
-from typing import Any, Literal
+from typing import Literal
 
 from rich.console import Console
 from rich.panel import Panel
@@ -47,9 +47,9 @@ class cli_progress:
         return False
 
 
-def handle_cli_errors(func: Callable[..., Any]) -> Callable[..., Any]:
+def handle_cli_errors[**P, R](func: Callable[P, R]) -> Callable[P, R]:
     @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         try:
             return func(*args, **kwargs)
         except KeyboardInterrupt:

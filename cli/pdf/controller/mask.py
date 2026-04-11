@@ -45,6 +45,7 @@ def mask_pdf_text(
     fill = parse_color(color)
     matches: list[MaskMatch] = []
     total_redactions = 0
+    pattern_found: dict[str, bool] = dict.fromkeys(patterns, False)
 
     doc = fitz.open(src)
 
@@ -57,6 +58,7 @@ def mask_pdf_text(
             if not instances:
                 continue
 
+            pattern_found[pattern] = True
             rects_to_redact: list[fitz.Rect] = []
             if mask_line:
                 for match_rect in instances:
@@ -72,8 +74,6 @@ def mask_pdf_text(
             for rect in rects_to_redact:
                 page.add_redact_annot(rect, fill=fill)
 
-            page.apply_redactions()
-
             matches.append(
                 MaskMatch(
                     page_number=page_num + 1,
@@ -82,6 +82,12 @@ def mask_pdf_text(
                 )
             )
             total_redactions += len(rects_to_redact)
+
+        page.apply_redactions()
+
+    for pattern in patterns:
+        if not pattern_found[pattern]:
+            matches.append(MaskMatch(page_number=0, pattern=pattern, count=0))
 
     doc.save(dst)
     doc.close()

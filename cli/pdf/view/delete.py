@@ -1,27 +1,20 @@
 from rich.panel import Panel
 from stepper import Stepper, StepperTheme, StepStatus
 
-from cli.pdf.models import MaskResult
+from cli.pdf.models import DeleteResult
 from cli.utils import rp
 from cli.utils.console import console
 
 
-def show_mask_result(
-    result: MaskResult,
-    mask_line: bool = False,
-    insensitive: bool = False,
-    color: str = "black",
-) -> None:
-    mode = "whole-line" if mask_line else "exact-text"
-    options = [f"mode={mode}", f"color={color!r}"]
-    if insensitive:
-        options.append("case-insensitive")
-    rp.info(f"Masking with: {', '.join(options)}")
-
-    if result.total_redactions == 0:
+def show_delete_result(result: DeleteResult) -> None:
+    if result.total_deletions == 0:
         rp.warning("No matching text found. Output file created with no changes.")
         console.print()
         return
+
+    rp.success(
+        f"Deleted {result.total_deletions} occurrence(s) across {result.pages_with_matches} page(s)"
+    )
 
     console.print()
 
@@ -52,11 +45,7 @@ def show_mask_result(
             )
 
             if count > 0:
-                stepper.log(
-                    step_idx,
-                    f"Found {count} occurrence{'s' if count != 1 else ''}"
-                    + (" — line masked" if mask_line else ""),
-                )
+                stepper.log(step_idx, f"Deleted {count} occurrence{'s' if count != 1 else ''}")
                 stepper.set_step_progress(step_idx, 1.0)
                 stepper.set_step_status(step_idx, StepStatus.COMPLETED)
             else:
@@ -66,10 +55,10 @@ def show_mask_result(
 
     console.print()
     _show_details(result)
-    _show_summary(result, mask_line=mask_line, insensitive=insensitive, color=color)
+    _show_summary(result)
 
 
-def _show_details(result: MaskResult) -> None:
+def _show_details(result: DeleteResult) -> None:
     lines: list[str] = []
     for page_num in result.pages_affected:
         page_matches = [m for m in result.matches if m.page_number == page_num]
@@ -80,38 +69,26 @@ def _show_details(result: MaskResult) -> None:
         console.print(
             Panel(
                 "\n".join(lines),
-                title="[bold]Redaction Details[/bold]",
+                title="[bold]Deletion Details[/bold]",
                 border_style="red",
             )
         )
         console.print()
 
 
-def _show_summary(
-    result: MaskResult,
-    mask_line: bool = False,
-    insensitive: bool = False,
-    color: str = "black",
-) -> None:
-    options: list[str] = [f"color={color!r}"]
-    if mask_line:
-        options.append("line-mode")
-    if insensitive:
-        options.append("case-insensitive")
-    option_str = f" [dim]({', '.join(options)})[/dim]" if options else ""
-
+def _show_summary(result: DeleteResult) -> None:
     parts = [
         f"[bold]Input:[/bold]  {result.input_path}",
         f"[bold]Output:[/bold] {result.output_path}",
         f"[bold]Patterns:[/bold] {', '.join(repr(p) for p in result.patterns)}",
-        f"[bold]Total redactions:[/bold] {result.total_redactions}",
+        f"[bold]Total deletions:[/bold] {result.total_deletions}",
         f"[bold]Pages affected:[/bold] {result.pages_with_matches} ({', '.join(str(p) for p in result.pages_affected)})",
     ]
 
     console.print(
         Panel(
             "\n".join(parts),
-            title=f"[bold green]Mask Complete{option_str}[/bold green]",
+            title="[bold green]Delete Complete[/bold green]",
             border_style="green",
         )
     )

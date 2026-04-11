@@ -47,3 +47,88 @@ class MaskResult:
     @property
     def pages_with_matches(self) -> int:
         return len(self.pages_affected)
+
+
+@dataclass(frozen=True)
+class PasswordResult:
+    input_path: str
+    output_path: str
+    was_encrypted: bool
+    total_pages: int
+
+
+@dataclass(frozen=True)
+class PageRemoveResult:
+    input_path: str
+    output_path: str
+    original_pages: int
+    new_pages: int
+    removed_page: int
+
+
+@dataclass(frozen=True)
+class MergeResult:
+    output_path: str
+    input_files: list[str]
+    total_pages: int
+    skipped_files: list[str]
+
+
+@dataclass(frozen=True)
+class CropResult:
+    input_path: str
+    output_path: str
+    height: float
+    total_pages: int
+    pages_cropped: int
+    pages_skipped: int
+
+
+@dataclass(frozen=True)
+class ReplaceMatch:
+    page_number: int
+    pattern: str
+    replacement: str
+    count: int
+
+
+@dataclass(frozen=True)
+class ReplaceResult:
+    input_path: str
+    output_path: str
+    pattern: str
+    replacement: str
+    matches: list[ReplaceMatch] = field(default_factory=list)
+    total_replacements: int = 0
+
+    @property
+    def pages_affected(self) -> list[int]:
+        return sorted({m.page_number for m in self.matches})
+
+    @property
+    def pages_with_matches(self) -> int:
+        return len(self.pages_affected)
+
+
+@dataclass(frozen=True)
+class DeleteMatch:
+    page_number: int
+    pattern: str
+    count: int
+
+
+@dataclass(frozen=True)
+class DeleteResult:
+    input_path: str
+    output_path: str
+    patterns: list[str]
+    matches: list[DeleteMatch] = field(default_factory=list)
+    total_deletions: int = 0
+
+    @property
+    def pages_affected(self) -> list[int]:
+        return sorted({m.page_number for m in self.matches})
+
+    @property
+    def pages_with_matches(self) -> int:
+        return len(self.pages_affected)

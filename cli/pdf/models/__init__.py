@@ -132,3 +132,14 @@ class DeleteResult:
     @property
     def pages_with_matches(self) -> int:
         return len(self.pages_affected)
+
+
+@dataclass(frozen=True)
+class MetadataResult:
+    """Result of stripping metadata from a PDF."""
+
+    input_path: str
+    output_path: str
+    total_pages: int
+    # Metadata keys that had non-empty values before removal
+    fields_cleared: list[str] = field(default_factory=list)

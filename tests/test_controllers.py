@@ -9,6 +9,7 @@ from cli.pdf.controller.mask import mask_pdf_text, parse_color
 from cli.pdf.controller.merge import merge_pdfs
 from cli.pdf.controller.read import extract_pdf_text
 from cli.pdf.controller.remove_last_page import remove_last_page
+from cli.pdf.controller.remove_metadata import remove_pdf_metadata
 from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
 
@@ -384,3 +385,75 @@ class TestCropPdf:
         assert out.exists()
         assert result.total_pages == 3
         assert result.pages_cropped == 3
+
+
+class TestRemoveMetadata:
+    def test_strips_info_dict_metadata(self, pdf_with_metadata: Path, tmp_path: Path):
+        """Info dict fields are cleared and listed in fields_cleared."""
+        out = tmp_path / "clean.pdf"
+        result = remove_pdf_metadata(str(pdf_with_metadata), str(out))
+
+        assert out.exists()
+        assert "title" in result.fields_cleared
+        assert "author" in result.fields_cleared
+        assert "producer" in result.fields_cleared
+
+        # Verify the output PDF no longer carries the metadata values
+        doc = fitz.open(out)
+        meta = doc.metadata or {}
+        doc.close()
+        assert meta.get("title") == ""
+        assert meta.get("author") == ""
+
+    def test_strips_xmp_metadata(self, pdf_with_xmp: Path, tmp_path: Path):
+        """XMP stream is removed and 'xmp' appears in fields_cleared."""
+        out = tmp_path / "clean.pdf"
+        result = remove_pdf_metadata(str(pdf_with_xmp), str(out))
+
+        assert "xmp" in result.fields_cleared
+
+        # Verify XMP stream is gone in the output
+        doc = fitz.open(out)
+        xmp = doc.get_xml_metadata()
+        doc.close()
+        assert not xmp
+
+    def test_no_metadata_returns_empty_fields_cleared(self, sample_pdf: Path, tmp_path: Path):
+        """A PDF with no metadata produces an empty fields_cleared list."""
+        out = tmp_path / "clean.pdf"
+        result = remove_pdf_metadata(str(sample_pdf), str(out))
+
+        assert result.fields_cleared == []
+        assert out.exists()
+
+    def test_in_place_replaces_original(self, pdf_with_metadata: Path):
+        """When input and output are the same path, the file is updated in-place."""
+        path_str = str(pdf_with_metadata)
+        result = remove_pdf_metadata(path_str, path_str)
+
+        assert result.input_path == result.output_path
+        assert pdf_with_metadata.exists()
+
+        # Original metadata must be gone
+        doc = fitz.open(pdf_with_metadata)
+        meta = doc.metadata or {}
+        doc.close()
+        assert meta.get("title") == ""
+
+    def test_total_pages_matches_source(self, pdf_with_metadata: Path, tmp_path: Path):
+        """total_pages in the result equals the source document's page count."""
+        out = tmp_path / "clean.pdf"
+        result = remove_pdf_metadata(str(pdf_with_metadata), str(out))
+        assert result.total_pages == 1
+
+    def test_file_not_found(self, tmp_path: Path):
+        out = tmp_path / "out.pdf"
+        with pytest.raises(FileNotFoundError):
+            remove_pdf_metadata("/nonexistent/file.pdf", str(out))
+
+    def test_non_pdf_raises(self, tmp_path: Path):
+        txt = tmp_path / "test.txt"
+        txt.write_text("not a pdf")
+        out = tmp_path / "out.pdf"
+        with pytest.raises(ValueError, match="Not a PDF"):
+            remove_pdf_metadata(str(txt), str(out))

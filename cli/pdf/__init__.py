@@ -8,6 +8,7 @@ from cli.pdf.controller.mask import mask_pdf_text
 from cli.pdf.controller.merge import merge_pdfs
 from cli.pdf.controller.read import extract_pdf_text
 from cli.pdf.controller.remove_last_page import remove_last_page as _remove_last_page_ctrl
+from cli.pdf.controller.remove_metadata import remove_pdf_metadata
 from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
 from cli.pdf.view.crop import show_crop_result
@@ -16,6 +17,7 @@ from cli.pdf.view.mask import show_mask_result
 from cli.pdf.view.merge import show_merge_result
 from cli.pdf.view.read import show_pdf_text
 from cli.pdf.view.remove_last_page import show_remove_result
+from cli.pdf.view.remove_metadata import show_metadata_result
 from cli.pdf.view.remove_password import show_password_result
 from cli.pdf.view.replace import show_replace_result
 from cli.utils.decorators import cli_progress, handle_cli_errors
@@ -176,6 +178,23 @@ def remove_last_page(
         result = _remove_last_page_ctrl(file_path, output)
 
     show_remove_result(result)
+
+
+@cli.command(name="remove-metadata")
+@handle_cli_errors
+def remove_metadata(
+    file_path: Annotated[
+        str, cyclopts.Parameter(name=["--file", "-f"], help="Path to the input PDF file")
+    ],
+    output: Annotated[
+        str, cyclopts.Parameter(name=["--output", "-o"], help="Path for the cleaned output PDF")
+    ],
+) -> None:
+    """Strip all metadata (author, title, dates, etc.) from a PDF file."""
+    with cli_progress("Removing metadata from PDF..."):
+        result = remove_pdf_metadata(file_path, output)
+
+    show_metadata_result(result)
 
 
 @cli.command(name="merge")

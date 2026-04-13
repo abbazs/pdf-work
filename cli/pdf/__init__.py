@@ -4,6 +4,7 @@ import cyclopts
 
 from cli.pdf.controller.crop import crop_pdf
 from cli.pdf.controller.delete import delete_pdf_text
+from cli.pdf.controller.highlight import highlight_pdf_text
 from cli.pdf.controller.mask import mask_pdf_text
 from cli.pdf.controller.merge import merge_pdfs
 from cli.pdf.controller.read import extract_pdf_text
@@ -13,6 +14,7 @@ from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
 from cli.pdf.view.crop import show_crop_result
 from cli.pdf.view.delete import show_delete_result
+from cli.pdf.view.highlight import show_highlight_result
 from cli.pdf.view.mask import show_mask_result
 from cli.pdf.view.merge import show_merge_result
 from cli.pdf.view.read import show_pdf_text
@@ -88,6 +90,69 @@ def mask(
         result = mask_pdf_text(file_path, output, patterns=text, mask_line=line, color=color)
 
     show_mask_result(result, mask_line=line, insensitive=insensitive, color=color)
+
+
+@cli.command(name=["highlight", "hl"])
+@handle_cli_errors
+def highlight(
+    file_path: Annotated[
+        str, cyclopts.Parameter(name=["--file", "-f"], help="Path to the input PDF file")
+    ],
+    output: Annotated[
+        str, cyclopts.Parameter(name=["--output", "-o"], help="Path for the highlighted output PDF")
+    ],
+    text: Annotated[
+        list[str],
+        cyclopts.Parameter(
+            name=["--text", "-t"],
+            help="Text pattern to highlight (repeatable, e.g. -t 'TODO' -t 'FIXME')",
+        ),
+    ],
+    line: Annotated[
+        bool,
+        cyclopts.Parameter(
+            name=["--line", "-l"],
+            help="Highlight the entire line containing matched text",
+        ),
+    ] = False,
+    insensitive: Annotated[
+        bool,
+        cyclopts.Parameter(
+            name=["--insensitive", "-i"],
+            help="Case-insensitive text matching",
+        ),
+    ] = False,
+    color: Annotated[
+        str,
+        cyclopts.Parameter(
+            name=["--color", "-c"],
+            help="Highlight fill color — name (yellow, red, green) or hex (#RRGGBB)",
+        ),
+    ] = "yellow",
+    opacity: Annotated[
+        float,
+        cyclopts.Parameter(
+            name=["--opacity", "-op"],
+            help="Highlight opacity from 0.0 (invisible) to 1.0 (opaque)",
+        ),
+    ] = 0.4,
+) -> None:
+    """Highlight matching text in a PDF with a semi-transparent colored overlay.
+
+    Unlike mask, the underlying text is preserved — it remains selectable and
+    searchable in the output PDF.
+    """
+    with cli_progress("Highlighting text in PDF..."):
+        result = highlight_pdf_text(
+            file_path,
+            output,
+            patterns=text,
+            mask_line=line,
+            color=color,
+            opacity=opacity,
+        )
+
+    show_highlight_result(result, mask_line=line, insensitive=insensitive, color=color, opacity=opacity)
 
 
 @cli.command(name="replace")

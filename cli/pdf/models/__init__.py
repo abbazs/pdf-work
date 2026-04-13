@@ -143,3 +143,33 @@ class MetadataResult:
     total_pages: int
     # Metadata keys that had non-empty values before removal
     fields_cleared: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class HighlightMatch:
+    """A single pattern match found during highlighting."""
+
+    page_number: int
+    pattern: str
+    count: int
+
+
+@dataclass(frozen=True)
+class HighlightResult:
+    """Result of highlighting text in a PDF."""
+
+    input_path: str
+    output_path: str
+    patterns: list[str]
+    matches: list[HighlightMatch] = field(default_factory=list)
+    total_highlights: int = 0
+
+    @property
+    def pages_affected(self) -> list[int]:
+        """Sorted list of page numbers that had at least one highlight."""
+        return sorted({m.page_number for m in self.matches})
+
+    @property
+    def pages_with_matches(self) -> int:
+        """Number of pages that had at least one highlight."""
+        return len(self.pages_affected)

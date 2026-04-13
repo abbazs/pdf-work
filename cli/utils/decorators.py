@@ -56,6 +56,26 @@ def handle_cli_errors[**P, R](func: Callable[P, R]) -> Callable[P, R]:
             from cli.utils.rp import rp
 
             rp.warning("Operation cancelled.")
+        except ValueError as e:
+            from cli.utils.console import console
+
+            console.print(
+                Panel(
+                    f"[red]{e}[/red]",
+                    title="[bold red]Validation Error[/bold red]",
+                    border_style="red",
+                )
+            )
+        except FileNotFoundError as e:
+            from cli.utils.console import console
+
+            console.print(
+                Panel(
+                    f"[red]{e}[/red]",
+                    title="[bold red]File Not Found[/bold red]",
+                    border_style="red",
+                )
+            )
         except Exception as e:
             from cli.utils.console import console
 

@@ -568,3 +568,67 @@ class TestHighlightPdfText:
         out = tmp_path / "out.pdf"
         with pytest.raises(ValueError, match="Not a PDF"):
             highlight_pdf_text(str(txt), str(out), ["x"])
+
+
+from unittest.mock import patch
+
+from cli.utils.decorators import handle_cli_errors
+from cli.utils.console import console as _console
+
+
+class TestHandleCliErrors:
+    """handle_cli_errors decorator renders clean panels for user-facing errors."""
+
+    def _run_decorated(self, exc: Exception) -> list[str]:
+        """Helper: decorate a function that raises ``exc``, capture console output.
+
+        For rich Panel objects, extracts the title and renderable text so assertions
+        can check content without rendering to a terminal.
+        """
+        from rich.panel import Panel as _Panel
+
+        captured: list[str] = []
+
+        def _capture(*a, **kw):
+            item = a[0]
+            if isinstance(item, _Panel):
+                # Extract title and renderable text from the Panel for easy assertion
+                parts = []
+                if item.title is not None:
+                    parts.append(str(item.title))
+                parts.append(str(item.renderable))
+                captured.append(" ".join(parts))
+            else:
+                captured.append(str(item))
+
+        @handle_cli_errors
+        def boom() -> None:
+            raise exc
+
+        with patch.object(_console, "print", side_effect=_capture):
+            boom()
+
+        return captured
+
+    def test_value_error_shows_validation_panel(self):
+        """ValueError produces a 'Validation Error' panel — no traceback."""
+        output = self._run_decorated(ValueError("opacity must be between 0.0 and 1.0, got: 1.5"))
+        combined = " ".join(output)
+        assert "Validation Error" in combined
+        assert "opacity must be between" in combined
+        # Must NOT contain raw traceback noise
+        assert "Traceback" not in combined
+
+    def test_file_not_found_shows_clean_panel(self):
+        """FileNotFoundError produces a 'File Not Found' panel — no traceback."""
+        output = self._run_decorated(FileNotFoundError("PDF file not found: /bad/path.pdf"))
+        combined = " ".join(output)
+        assert "File Not Found" in combined
+        assert "/bad/path.pdf" in combined
+        assert "Traceback" not in combined
+
+    def test_unexpected_error_still_shows_traceback(self):
+        """Generic exceptions still include the traceback."""
+        output = self._run_decorated(RuntimeError("something unexpected"))
+        combined = " ".join(output)
+        assert "RuntimeError" in combined

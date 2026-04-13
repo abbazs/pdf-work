@@ -5,6 +5,7 @@ import pytest
 
 from cli.pdf.controller.crop import crop_pdf
 from cli.pdf.controller.delete import delete_pdf_text
+from cli.pdf.controller.highlight import highlight_pdf_text
 from cli.pdf.controller.mask import mask_pdf_text, parse_color
 from cli.pdf.controller.merge import merge_pdfs
 from cli.pdf.controller.read import extract_pdf_text
@@ -457,3 +458,113 @@ class TestRemoveMetadata:
         out = tmp_path / "out.pdf"
         with pytest.raises(ValueError, match="Not a PDF"):
             remove_pdf_metadata(str(txt), str(out))
+
+
+class TestHighlightPdfText:
+    def test_highlights_text_creates_output(self, sample_pdf: Path, tmp_path: Path):
+        """Basic highlight creates the output file and reports matches."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["Hello"])
+        assert out.exists()
+        assert result.total_highlights > 0
+        assert len(result.matches) >= 1
+
+    def test_text_remains_in_output(self, sample_pdf: Path, tmp_path: Path):
+        """Unlike mask/redact, the underlying text must still be present."""
+        out = tmp_path / "highlighted.pdf"
+        highlight_pdf_text(str(sample_pdf), str(out), ["Hello"])
+        doc = fitz.open(out)
+        text = doc[0].get_text()
+        doc.close()
+        assert "Hello" in text
+
+    def test_output_has_same_page_count(self, multi_pdf: Path, tmp_path: Path):
+        """Page count is preserved after highlighting."""
+        out = tmp_path / "highlighted.pdf"
+        highlight_pdf_text(str(multi_pdf), str(out), ["Page"])
+        doc = fitz.open(out)
+        assert len(doc) == 3
+        doc.close()
+
+    def test_multiple_patterns(self, sample_pdf: Path, tmp_path: Path):
+        """Multiple patterns are all highlighted."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["Hello", "World"])
+        assert result.total_highlights >= 2
+
+    def test_line_mode(self, sample_pdf: Path, tmp_path: Path):
+        """Line mode highlights the full line, not just the matched span."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["Hello"], mask_line=True)
+        assert result.total_highlights > 0
+
+    def test_line_mode_deduplicates_same_line(self, tmp_path: Path):
+        """In line mode, a line is highlighted at most once even if matched by multiple patterns.
+
+        Without deduplication, overlapping opaque rectangles stack on top of each
+        other and make the highlight appear solid/dark. The y-band set is shared
+        at the page level across all patterns so the full-line rect is only drawn once.
+        """
+        # Create a PDF where "Hello World" appears on a single line — both words match
+        pdf_path = tmp_path / "two_matches.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Hello World", fontsize=12)
+        doc.save(pdf_path)
+        doc.close()
+
+        out = tmp_path / "highlighted.pdf"
+        # Both patterns match the same line; in line mode only ONE rect should be drawn
+        result = highlight_pdf_text(
+            str(pdf_path), str(out), ["Hello", "World"], mask_line=True
+        )
+        # Two patterns matched, but both expand to the same y-band — total_highlights
+        # must equal 1 (one full-line rect), not 2
+        assert result.total_highlights == 1
+
+    def test_no_match_still_creates_output(self, sample_pdf: Path, tmp_path: Path):
+        """A PDF is written even when no patterns match."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["ZZZZNOTFOUND"])
+        assert out.exists()
+        assert result.total_highlights == 0
+
+    def test_custom_color(self, sample_pdf: Path, tmp_path: Path):
+        """Custom color name is accepted without error."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["Hello"], color="red")
+        assert out.exists()
+        assert result.total_highlights > 0
+
+    def test_custom_opacity(self, sample_pdf: Path, tmp_path: Path):
+        """Custom opacity in 0.0–1.0 is accepted without error."""
+        out = tmp_path / "highlighted.pdf"
+        result = highlight_pdf_text(str(sample_pdf), str(out), ["Hello"], opacity=0.8)
+        assert out.exists()
+        assert result.total_highlights > 0
+
+    def test_opacity_above_one_raises(self, sample_pdf: Path, tmp_path: Path):
+        """Opacity > 1.0 raises ValueError with a clear message."""
+        out = tmp_path / "highlighted.pdf"
+        with pytest.raises(ValueError, match="opacity must be between"):
+            highlight_pdf_text(str(sample_pdf), str(out), ["Hello"], opacity=1.5)
+
+    def test_opacity_below_zero_raises(self, sample_pdf: Path, tmp_path: Path):
+        """Opacity < 0.0 raises ValueError with a clear message."""
+        out = tmp_path / "highlighted.pdf"
+        with pytest.raises(ValueError, match="opacity must be between"):
+            highlight_pdf_text(str(sample_pdf), str(out), ["Hello"], opacity=-0.1)
+
+    def test_file_not_found(self, tmp_path: Path):
+        """Non-existent input path raises FileNotFoundError."""
+        out = tmp_path / "out.pdf"
+        with pytest.raises(FileNotFoundError):
+            highlight_pdf_text("/nonexistent/file.pdf", str(out), ["x"])
+
+    def test_non_pdf_raises(self, tmp_path: Path):
+        """Non-PDF input raises ValueError."""
+        txt = tmp_path / "test.txt"
+        txt.write_text("not a pdf")
+        out = tmp_path / "out.pdf"
+        with pytest.raises(ValueError, match="Not a PDF"):
+            highlight_pdf_text(str(txt), str(out), ["x"])

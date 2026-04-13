@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import fitz
 import pytest
@@ -13,6 +14,8 @@ from cli.pdf.controller.remove_last_page import remove_last_page
 from cli.pdf.controller.remove_metadata import remove_pdf_metadata
 from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
+from cli.utils.console import console as _console
+from cli.utils.decorators import handle_cli_errors
 
 
 class TestParseColor:
@@ -568,12 +571,6 @@ class TestHighlightPdfText:
         out = tmp_path / "out.pdf"
         with pytest.raises(ValueError, match="Not a PDF"):
             highlight_pdf_text(str(txt), str(out), ["x"])
-
-
-from unittest.mock import patch
-
-from cli.utils.decorators import handle_cli_errors
-from cli.utils.console import console as _console
 
 
 class TestHandleCliErrors:

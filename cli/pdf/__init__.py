@@ -119,7 +119,7 @@ def highlight(
         bool,
         cyclopts.Parameter(
             name=["--insensitive", "-i"],
-            help="Case-insensitive text matching",
+            help="Case-insensitive text matching (search is case-insensitive by default)",
         ),
     ] = False,
     color: Annotated[

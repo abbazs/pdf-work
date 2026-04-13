@@ -167,7 +167,7 @@ class HighlightResult:
     @property
     def pages_affected(self) -> list[int]:
         """Sorted list of page numbers that had at least one highlight."""
-        return sorted({m.page_number for m in self.matches})
+        return sorted({m.page_number for m in self.matches if m.page_number > 0})
 
     @property
     def pages_with_matches(self) -> int:

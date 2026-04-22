@@ -6,6 +6,7 @@ import pytest
 
 from cli.pdf.controller.crop import crop_pdf
 from cli.pdf.controller.delete import delete_pdf_text
+from cli.pdf.controller.extract import extract_pages
 from cli.pdf.controller.highlight import highlight_pdf_text
 from cli.pdf.controller.mask import mask_pdf_text, parse_color
 from cli.pdf.controller.merge import merge_pdfs
@@ -14,6 +15,7 @@ from cli.pdf.controller.remove_last_page import remove_last_page
 from cli.pdf.controller.remove_metadata import remove_pdf_metadata
 from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
+from cli.pdf.utils import format_size, parse_size
 from cli.utils.console import console as _console
 from cli.utils.decorators import handle_cli_errors
 
@@ -629,3 +631,174 @@ class TestHandleCliErrors:
         output = self._run_decorated(RuntimeError("something unexpected"))
         combined = " ".join(output)
         assert "RuntimeError" in combined
+
+
+class TestExtractPages:
+    def test_extracts_single_page(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1])
+        assert result.pages_extracted == 1
+        assert result.extracted[0].page_number == 1
+        assert "multi-1.pdf" in result.extracted[0].output_path
+        doc = fitz.open(result.extracted[0].output_path)
+        assert len(doc) == 1
+        assert "Page One Content" in doc[0].get_text()
+        doc.close()
+
+    def test_extracts_multiple_pages(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1, 3])
+        assert result.pages_extracted == 2
+        assert result.extracted[0].page_number == 1
+        assert result.extracted[1].page_number == 3
+
+    def test_output_contains_correct_content(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[2])
+        assert result.pages_extracted == 1
+        doc = fitz.open(result.extracted[0].output_path)
+        assert "Page Two Stuff" in doc[0].get_text()
+        doc.close()
+
+    def test_skips_out_of_range_pages(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1, 99])
+        assert result.pages_extracted == 1
+        assert result.skipped_pages == [99]
+
+    def test_skips_zero_page_number(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[0])
+        assert result.pages_extracted == 0
+        assert result.skipped_pages == [0]
+
+    def test_skips_negative_page_number(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[-1])
+        assert result.pages_extracted == 0
+        assert result.skipped_pages == [-1]
+
+    def test_total_pages_matches_source(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1])
+        assert result.total_pages == 3
+
+    def test_file_not_found(self):
+        with pytest.raises(FileNotFoundError):
+            extract_pages("/nonexistent/file.pdf", pages=[1])
+
+    def test_non_pdf_raises(self, tmp_path: Path):
+        txt = tmp_path / "test.txt"
+        txt.write_text("not a pdf")
+        with pytest.raises(ValueError, match="Not a PDF"):
+            extract_pages(str(txt), pages=[1])
+
+    def test_output_naming_convention(self, tmp_path: Path):
+        pdf_path = tmp_path / "estatement.pdf"
+        doc = fitz.open()
+        for text in ["A", "B", "C"]:
+            page = doc.new_page()
+            page.insert_text((72, 72), text, fontsize=12)
+        doc.save(pdf_path)
+        doc.close()
+
+        result = extract_pages(str(pdf_path), pages=[1, 3])
+        assert result.extracted[0].output_path.endswith("estatement-1.pdf")
+        assert result.extracted[1].output_path.endswith("estatement-3.pdf")
+
+    def test_file_size_is_populated(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1])
+        assert result.extracted[0].file_size > 0
+
+    def test_no_size_limit_by_default(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1])
+        assert result.extracted[0].size_limit is None
+        assert result.extracted[0].compressed is False
+
+    def test_size_limit_not_needed(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1], max_size=10 * 1024 * 1024)
+        assert result.extracted[0].file_size > 0
+        assert result.extracted[0].compressed is False
+
+    def test_size_limit_triggers_compression(self, tmp_path: Path):
+        # Build an image-heavy PDF so rasterization at lower DPI actually shrinks it
+        pdf_path = tmp_path / "heavy.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 2000, 2000))
+        pix.set_rect(pix.irect, (200, 100, 50))
+        page.insert_image(page.rect, stream=pix.tobytes("png"))
+        doc.save(pdf_path)
+        doc.close()
+
+        uncompressed = extract_pages(str(pdf_path), pages=[1])
+        original_size = uncompressed.extracted[0].file_size
+
+        tiny_limit = max(original_size // 2, 1)
+        compressed = extract_pages(str(pdf_path), pages=[1], max_size=tiny_limit)
+        assert compressed.extracted[0].compressed is True
+        assert compressed.extracted[0].file_size < original_size
+
+    def test_size_limit_never_grows_file(self, multi_pdf: Path):
+        uncompressed = extract_pages(str(multi_pdf), pages=[1])
+        original_size = uncompressed.extracted[0].file_size
+
+        tiny_limit = max(original_size // 2, 1)
+        compressed = extract_pages(str(multi_pdf), pages=[1], max_size=tiny_limit)
+        assert compressed.extracted[0].compressed is True
+        assert compressed.extracted[0].file_size <= original_size
+
+    def test_size_limit_populated_on_result(self, multi_pdf: Path):
+        result = extract_pages(str(multi_pdf), pages=[1], max_size=5000)
+        assert result.extracted[0].size_limit == 5000
+
+
+class TestParseSize:
+    def test_bytes_only(self):
+        assert parse_size("1024") == 1024
+
+    def test_kb(self):
+        assert parse_size("1KB") == 1024
+
+    def test_kb_lowercase(self):
+        assert parse_size("500kb") == 500 * 1024
+
+    def test_mb(self):
+        assert parse_size("1MB") == 1024 * 1024
+
+    def test_gb(self):
+        assert parse_size("1GB") == 1024 * 1024 * 1024
+
+    def test_decimal_value(self):
+        assert parse_size("1.5MB") == int(1.5 * 1024 * 1024)
+
+    def test_whitespace_trimmed(self):
+        assert parse_size("  500Kb  ") == 500 * 1024
+
+    def test_b_suffix(self):
+        assert parse_size("1024B") == 1024
+
+    def test_invalid_format_raises(self):
+        with pytest.raises(ValueError, match="Invalid size format"):
+            parse_size("abc")
+
+    def test_empty_string_raises(self):
+        with pytest.raises(ValueError, match="Invalid size format"):
+            parse_size("")
+
+    def test_negative_raises(self):
+        with pytest.raises(ValueError, match="Invalid size format"):
+            parse_size("-1MB")
+
+
+class TestFormatSize:
+    def test_bytes(self):
+        assert format_size(500) == "500B"
+
+    def test_kilobytes(self):
+        assert format_size(1024) == "1.0KB"
+
+    def test_megabytes(self):
+        assert format_size(1024 * 1024) == "1.0MB"
+
+    def test_gigabytes(self):
+        assert format_size(1024 * 1024 * 1024) == "1.0GB"
+
+    def test_fractional_kb(self):
+        assert format_size(512) == "512B"
+
+    def test_large_kb(self):
+        assert format_size(1500) == "1.5KB"

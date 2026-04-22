@@ -4,6 +4,7 @@ import cyclopts
 
 from cli.pdf.controller.crop import crop_pdf
 from cli.pdf.controller.delete import delete_pdf_text
+from cli.pdf.controller.extract import extract_pages
 from cli.pdf.controller.highlight import highlight_pdf_text
 from cli.pdf.controller.mask import mask_pdf_text
 from cli.pdf.controller.merge import merge_pdfs
@@ -12,8 +13,10 @@ from cli.pdf.controller.remove_last_page import remove_last_page as _remove_last
 from cli.pdf.controller.remove_metadata import remove_pdf_metadata
 from cli.pdf.controller.remove_password import remove_pdf_password
 from cli.pdf.controller.replace import replace_pdf_text
+from cli.pdf.utils import parse_size
 from cli.pdf.view.crop import show_crop_result
 from cli.pdf.view.delete import show_delete_result
+from cli.pdf.view.extract import show_extract_result
 from cli.pdf.view.highlight import show_highlight_result
 from cli.pdf.view.mask import show_mask_result
 from cli.pdf.view.merge import show_merge_result
@@ -45,6 +48,41 @@ def read(
         result = extract_pdf_text(file_path, pages=pages)
 
     show_pdf_text(result)
+
+
+@cli.command(name="extract")
+@handle_cli_errors
+def extract(
+    file_path: Annotated[
+        str, cyclopts.Parameter(name=["--file", "-f"], help="Path to the input PDF file")
+    ],
+    pages: Annotated[
+        list[int],
+        cyclopts.Parameter(
+            name=["--pages", "-p"],
+            help="Page numbers to extract (repeatable, e.g. -p 1 -p 3)",
+        ),
+    ],
+    max_size: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            name=["--max-size", "-s"],
+            help="Maximum output file size per page (e.g. 500Kb, 1Mb)",
+        ),
+    ] = None,
+) -> None:
+    """Extract specific pages from a PDF as separate files.
+
+    Each page is saved as a standalone PDF named after the original file,
+    e.g. input.pdf with -p 1 -p 3 produces input-1.pdf and input-3.pdf.
+
+    Use -s to cap the output file size per page (compresses via rasterization).
+    """
+    size_bytes = parse_size(max_size) if max_size else None
+    with cli_progress("Extracting pages from PDF..."):
+        result = extract_pages(file_path, pages=pages, max_size=size_bytes)
+
+    show_extract_result(result)
 
 
 @cli.command(name="mask")

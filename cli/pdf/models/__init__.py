@@ -173,3 +173,29 @@ class HighlightResult:
     def pages_with_matches(self) -> int:
         """Number of pages that had at least one highlight."""
         return len(self.pages_affected)
+
+
+@dataclass(frozen=True)
+class ExtractedPage:
+    """A single page extracted as a separate PDF file."""
+
+    page_number: int
+    output_path: str
+    file_size: int
+    size_limit: int | None = None
+    compressed: bool = False
+
+
+@dataclass(frozen=True)
+class ExtractResult:
+    """Result of extracting individual pages from a PDF."""
+
+    input_path: str
+    total_pages: int
+    extracted: list[ExtractedPage] = field(default_factory=list)
+    skipped_pages: list[int] = field(default_factory=list)
+
+    @property
+    def pages_extracted(self) -> int:
+        """Number of pages successfully extracted."""
+        return len(self.extracted)
